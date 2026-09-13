@@ -1,9 +1,6 @@
 name: Decode PNGs
 on:
   push:
-    paths:
-      - "*.png.b64"
-      - ".github/workflows/decode-pngs.yml"
   workflow_dispatch:
 jobs:
   decode:
@@ -12,15 +9,29 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and commit PNGs
+      - name: Concatenate chunks, decode, commit PNGs
         run: |
           set -euo pipefail
           shopt -s nullglob
-          for f in *.png.b64; do
-            out="${f%.b64}"
-            base64 -d "$f" > "$out"
-            file "$out"
-            git add "$out"
+          mkdir -p out
+          for prefix in \
+            fr-tenant-login-walkthrough \
+            fr-tenant-schedule-walkthrough \
+            fr-app-login-walkthrough \
+            fr-app-dashboard-walkthrough \
+            fr-app-clients-walkthrough \
+            fr-app-settings-walkthrough
+          do
+            parts=(chunks/${prefix}.png.b64.*)
+            if [ ${#parts[@]} -eq 0 ]; then
+              echo "missing chunks for ${prefix}"
+              exit 1
+            fi
+            cat "${parts[@]}" | base64 -d > "out/${prefix}.png"
+            file "out/${prefix}.png"
+            python3 -c "from pathlib import Path; p=Path('out/${prefix}.png'); assert p.read_bytes()[:8]==bytes.fromhex('89504e470d0a1a0a'), p"
+            cp "out/${prefix}.png" "${prefix}.png"
+            git add "${prefix}.png"
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
